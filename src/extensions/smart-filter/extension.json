@@ -1,0 +1,17 @@
+{
+  "name": "Smart Filter",
+  "version": "1.0.0",
+  "description": "Plugin to add a filter rules generator useful in complex scenario where single column filter is not enought",
+  "url": "https://github.com/wenzhixin/bootstrap-table/tree/master/src/extensions/smart-filter",
+  "example": "http://issues.wenzhixin.net.cn/bootstrap-table/#extensions/smart-filter.html",
+
+  "plugins": [{
+    "name": "bootstrap-table-smart-filter",
+    "url": "https://github.com/wenzhixin/bootstrap-table/tree/master/src/extensions/smart-filter"
+  }],
+
+  "author": {
+    "name": "Michael Sogos",
+    "image": "https://avatars0.githubusercontent.com/u/971120"
+  }
+}
