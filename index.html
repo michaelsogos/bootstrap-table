@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" type="text/css" rel="stylesheet" />
+    <link href="dist/bootstrap-table.css" type="text/css" rel="stylesheet" />
+    <link href="src/extensions/smart-filter/bootstrap-table-smart-filter.css" type="text/css" rel="stylesheet" />
+    <script src="https://code.jquery.com/jquery-3.1.1.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="dist/bootstrap-table.js"></script>
+    <script src="src/extensions/smart-filter/bootstrap-table-smart-filter.js"></script>
+
+</head>
+
+<body>
+    <div style="margin:100px ;width:600px;overflow:hidden;">
+        <table id="table" data-ajax="ajaxRequest" data-pagination="true">
+            <thead>
+                <tr>
+                    <th data-field="id" >ID</th>
+                    <th data-field="name" data-field-type="number">Item Name</th>
+                    <th data-field="price" data-field-type="date">Item Price</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
+    <script type="text/javascript">
+        $(document).ready(function(){
+            $('#table').bootstrapTable({
+                smartFilter:true,
+                smartFilterEnableSaveQuery:false
+            });
+        });
+
+        function ajaxRequest(params){
+            $.ajax({
+                        url: "src/extensions/smart-filter/example/demo.response.json",
+                        cache:false,
+                        success: function(data){
+                            params.success ( data);
+                        },
+                        error:function(xhr,response,error){
+                            console.error(response);
+                        }
+                    })
+        }
+    </script>
+</body>
+
+</html>

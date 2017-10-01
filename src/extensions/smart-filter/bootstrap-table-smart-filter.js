@@ -1,6 +1,6 @@
 /**
  * @author: Michael Sogos <michael.sogos@gurustudioweb.it>
- * @version: v1.0.0 
+ * @version: v1.0.1 
  */
 
 (function ($) {
@@ -10,6 +10,7 @@
     //#region "Add to bootstrap-table configurations"
     $.extend($.fn.bootstrapTable.defaults, {
         smartFilter: false,
+        smartFilterEnableSaveQuery: false
     });
 
     $.extend($.fn.bootstrapTable.defaults.icons, {
@@ -50,16 +51,17 @@
         formatSmartFilterOperatorHourIs: function () { return 'hour equals to' },
         formatSmartFilterOperatorMinuteIs: function () { return 'minute equals to' },
         formatSmartFilterOperatorSecondIs: function () { return 'second equals to' },
-        filter_label_rule_and: 'and',
-        filter_label_rule_or: 'or',
+        formatSmartFilterOperandAnd: function () { return 'and' },
+        formatSmartFilterOperandOr: function () { return 'or' },
         formatSmartFilterRuleNotComplete: function () { return 'Please, complete the rule before add it!' },
+        formatSmartFilterErrorRuleAlreadyExist: function () { return 'This rule already exist!' },
+        formatSmartFilterSelectMoreRulesToGroup: function () { return 'Select two or more rules!' },
+        formatSmartFilterNotSequentialSelectioc: function () { return 'Please, select items sequentially !' },
+        formatSmartFilterEmptyRulesContainer: function () { return 'No rules has been configured yet' },
+        filter_label_temporaryFilter: 'building filter ...',
         filter_label_error_emptyFilterName: 'Please, specify a name for the filter!',
-        filter_label_error_noRule: 'Please, compose at least one rule!',
-        filter_label_error_ruleAlreadyExist: 'This rule already exist!',
         filter_label_error_ruleNameAlreadyUsed: 'A rule with this name already exist!',
-        filter_label_error_unselectedRules: 'Select two or more rules!',
-        filter_label_error_notSequentialSelection: 'Please, select items sequentially !',
-        filter_label_temporaryFilter: 'building filter ...'
+        filter_label_error_noRule: 'Please, compose at least one rule!'
     });
 
     $.extend($.fn.bootstrapTable.defaults, $.fn.bootstrapTable.locales);
@@ -101,6 +103,7 @@
             var template = smartFilterModalTemplate(this);
 
             $.each(this.columns, function (index, item) {
+                if (!item.field || !item.fieldType) return true;
                 var dataField = $('<a href="#"></a>').data({ fieldName: item.field, fieldLabel: item.title, fieldType: item.fieldType }).html(item.title);
                 var listItem = $('<li>').append(dataField);
                 template.find('#fields-list').append(listItem);
@@ -111,9 +114,13 @@
             template.find('#field-pre-operators').on('click', 'li a', { instance: this }, BootstrapTable.prototype.smartFilterFieldPerOperatorsChanged);
             template.find('#field-operators').on('click', 'li a', { instance: this }, BootstrapTable.prototype.smartFilterFieldOperatorsChanged);
             template.find('#filter-value-case').on('click', 'li a', { instance: this }, BootstrapTable.prototype.smartFilterFieldValueCaseChanged);
-            template.find('#filter-action-container').on('click', 'button.button-add', { instance: this }, BootstrapTable.prototype.smartFilterAddRule);
+            template.find('#filter-action-add').on('click', { instance: this }, BootstrapTable.prototype.smartFilterAddRule);
+            template.find('#filter-action-grouprule').on('click', { instance: this }, BootstrapTable.prototype.smartFilterAddGroupRule);
+            template.find('#filter-action-clear').on('click', { instance: this }, BootstrapTable.prototype.smartFilterClearRules);
 
             $('body').append(template);
+
+            smartFilterRenderRules(this);
         }
     }
     //#endregion
@@ -158,10 +165,14 @@
         var instance = event.data.instance;
         var modalBody = $(this).parents('.modal-body'); //<div>
         var selectedField = modalBody.find("#fields-list-button").data();
-        var preOperatorValue = modalBody.find("#field-pre-operators-button").val();
-        var operatorValue = modalBody.find("#field-operators-button").val();
+        var preOperatorButton = modalBody.find("#field-pre-operators-button");
+        var preOperatorValue = preOperatorButton.val();
+        var preOperatorText = preOperatorButton.text();
+        var operatorButton = modalBody.find("#field-operators-button");
+        var operatorValue = operatorButton.val();
+        var operatorText = operatorButton.text();
         var filterValue = modalBody.find("#filter-value").val();
-        var filterValueCase = modalBody.find("#filter-value-case").val();
+        var filterValueCase = modalBody.find("#filter-value-case-button").val();
 
         if (!selectedField.fieldName ||
             preOperatorValue == null ||
@@ -173,39 +184,137 @@
         }
 
         var filterRule = {
-            field: buttonField.data().property,
-            operator: buttonNegation.val() + ' ' + buttonOperator.val(),
-            value: inputValue.val(),
-            isCaseSensitive: buttonCaseSensitive.val().toLowerCase() == 'true' ? true : false
+            field: selectedField.fieldName,
+            operator: (preOperatorValue.length > 0 ? preOperatorValue + ' ' : '') + operatorValue,
+            value: filterValue,
+            isCaseSensitive: filterValueCase.toLowerCase() == 'true' ? true : false
         };
-        filterRule.description = element.data.options.filter_label_rule_fieldList + ' <span class="text-primary">' + filterRule.field + '</span> '
-        filterRule.description += element.data.options.filter_label_rule_operator + ' <span class="text-primary">' + buttonNegation.text() + '</span>'
-        filterRule.description += ' <span class="text-primary">' + buttonOperator.text() + '</span> '
-        filterRule.description += element.data.options.filter_label_rule_value
-        filterRule.description += ' <span class="text-primary">' + filterRule.value
-        filterRule.description += filterRule.isCaseSensitive ? '  (' + element.data.options.filter_label_rule_casesensitive_is + ')' : '  (' + element.data.options.filter_label_rule_casesensitive_notis + ')</span>';
 
-        if (element.data.helpers.data.filters) {
-            var duplicateRule = $.grep(element.data.helpers.data.filters, function (item, index) {
+        filterRule.description = instance.options.formatSmartFilterFieldListLabel() + ' <span class="text-primary">' + selectedField.fieldLabel + '</span> '
+        filterRule.description += instance.options.formatSmartFilterOperatorLabel() + ' <span class="text-primary">' + preOperatorText + '</span>'
+        filterRule.description += ' <span class="text-primary">' + operatorText + '</span> '
+        filterRule.description += instance.options.formatSmartFilterValueLabel()
+        filterRule.description += ' <span class="text-primary">' + filterRule.value
+        filterRule.description += filterRule.isCaseSensitive ? '  (' + instance.options.formatSmartFilterCaseSensitive() + ')' : '  (' + instance.options.formatSmartFilterCaseInsensitive() + ')</span>';
+
+        if (instance.options.smartFilterData) {
+            var duplicateRule = $.grep(instance.options.smartFilterData, function (item, index) {
                 if (item.field == filterRule.field && item.operator == filterRule.operator && item.value == filterRule.value && item.isCaseSensitive == filterRule.isCaseSensitive) {
                     return true;
                 } else {
                     return false;
                 }
             });
+
             if (duplicateRule.length <= 0) {
-                element.data.helpers.data.filters.push(filterRule);
+                instance.options.smartFilterData.push(filterRule);
             } else {
-                alert(element.data.options.filter_label_error_ruleAlreadyExist);
+                alert(instance.options.formatSmartFilterErrorRuleAlreadyExist());
             }
-        } else {
-            element.data.helpers.data.filters = [filterRule];
+        }
+        else {
+            instance.options.smartFilterData = [filterRule];
         }
 
-        $.fn.repeater.views.filter.renderRules(element.data.helpers, element.data.options);
+        if (instance.options.smartFilterData.length > 1)
+            $('#filter-action-grouprule').removeAttr("disabled");
+
+        smartFilterRenderRules(instance);
+
         return false;
+    }
 
+    BootstrapTable.prototype.smartFilterSelectRule = function (event) {
+        var instance = event.data.instance;
+        var parent = $(this).parent();
+        var ruleIndex = parseInt(parent.find('.button-remove').val());
 
+        if (!instance.options._smartFilterSelectedRules) instance.options._smartFilterSelectedRules = [];
+
+        if (parent.hasClass('selected')) {
+            var index = instance.options._smartFilterSelectedRules.indexOf(ruleIndex);
+            instance.options._smartFilterSelectedRules.splice(index, 1);
+        }
+        else {
+            instance.options._smartFilterSelectedRules.push(ruleIndex);
+        }
+
+        instance.options._smartFilterSelectedRules.sort();
+
+        parent.toggleClass('selected');
+    }
+
+    BootstrapTable.prototype.smartFilterRemoveRule = function (event) {
+        var instance = event.data.instance;
+        var ruleIndex = parseInt($(this).val());
+        if (instance.options.smartFilterData[ruleIndex].isGrouped) {
+            BootstrapTable.prototype.smartFilterCancelGroup(instance, ruleIndex);
+        }
+        instance.options.smartFilterData.splice(ruleIndex, 1);
+        smartFilterRenderRules(instance);
+    }
+
+    BootstrapTable.prototype.smartFilterToogleAndOr = function (element) {
+        var self = $(this);
+        if (self.val() == 'and') {
+            self.text(element.data.options.filter_label_rule_or);
+            self.val('or');
+        } else {
+            self.text(element.data.options.filter_label_rule_and);
+            self.val('and');
+        }
+
+        var buttonRemove = self.closest('div').find('.button-remove');
+        var ruleIndex = parseInt(buttonRemove.val());
+
+        element.data.helpers.data.filters[ruleIndex].condition = self.val();
+
+        return false;
+    }
+
+    BootstrapTable.prototype.smartFilterCancelGroup = function (instance, index) {
+        if (element.data.helpers.data.filters[index] && element.data.helpers.data.filters[index].isGrouped) {
+            element.data.helpers.data.filters[index].isGrouped = false;
+            if (index > 0) $.fn.repeater.views.filter.cancelGroup(element, index - 1);
+            $.fn.repeater.views.filter.cancelGroup(element, index + 1);
+        }
+    }
+
+    BootstrapTable.prototype.smartFilterAddGroupRule = function (event) {
+        var instance = event.data.instance;
+
+        if (!instance.options._smartFilterSelectedRules || instance.options._smartFilterSelectedRules.length <= 1) {
+            console.error(instance.options.formatSmartFilterSelectMoreRulesToGroup());
+            alert(instance.options.formatSmartFilterSelectMoreRulesToGroup());
+            return false;
+        }
+
+        var isSequentialSelection = true;
+        for (var i = 1; i < instance.options._smartFilterSelectedRules.length; i++) {
+            if (instance.options._smartFilterSelectedRules[i] - instance.options._smartFilterSelectedRules[i - 1] != 1) {
+                isSequentialSelection = false;
+                break;
+            }
+        }
+
+        if (!isSequentialSelection) {
+            console.error(instance.options.formatSmartFilterNotSequentialSelection());
+            alert(instance.options.formatSmartFilterNotSequentialSelection());
+            return false;
+        }
+
+        $.each(instance.options._smartFilterSelectedRules, function (index, item) {
+            instance.options.smartFilterData[item].isGrouped = true;
+        });
+
+        smartFilterRenderRules(instance);
+    }
+
+    BootstrapTable.prototype.smartFilterClearRules = function (event) {
+        var instance = event.data.instance;
+        instance.options.smartFilterData = [];
+        instance.options._smartFilterSelectedRules = [];
+        smartFilterRenderRules(instance);
     }
     //#endregion
 
@@ -219,8 +328,7 @@
                 <button type="button" class="close" data-dismiss="modal">&times;</button>\
                 <h4 class="modal-title">'+ instance.options.formatSmartFilterModalTitle() + '</h4>\
             </div>\
-            <div class="modal-body bg-info">\
-                <div class="row">\
+            <div class="modal-body">' + (instance.options.smartFilterEnableSaveQuery ? '<div class="row">\
                     <div class="col-md-12">\
                         <div class="input-group">\
                             <span class="input-group-btn">\
@@ -228,13 +336,12 @@
                             </span>\
                             <input type="text" class="form-control smart-filter-view-manage-rules-rulename">\
                             <div class="input-group-btn">\
-                                <button type="button" class="btn btn-info button-apply"><span class="glyphicon glyphicon-ok"></span>&nbsp; ' + instance.options.formatSmartFilterApplyButton() + '</button>\
-                                <button type="button" class="btn btn-danger button-reset"><span class="glyphicon glyphicon-remove"></span>&nbsp; ' + instance.options.formatSmartFilterResetButton() + '</button>\
+                                <button type="button" class="btn btn-info"><span class="glyphicon glyphicon-ok"></span>&nbsp; ' + instance.options.formatSmartFilterApplyButton() + '</button>\
+                                <button type="button" class="btn btn-danger"><span class="glyphicon glyphicon-remove"></span>&nbsp; ' + instance.options.formatSmartFilterResetButton() + '</button>\
                             </div>\
                         </div>\
                     </div>\
-                </div>\
-                <div class="row" style="margin-top:10px;">\
+                </div>' : '') + '<div class="row" style="margin-top:10px;">\
                     <div class="col-md-12">\
                         <div class="pull-left dropdown">\
                             <label class="">' + instance.options.formatSmartFilterFieldListLabel() + ' </label>\
@@ -276,7 +383,7 @@
                             &nbsp;\
                         </div>\
                         <div class="pull-left dropdown hidden" id="filter-value-case-container">\
-                            <button type="button" class="btn btn-info dropdown-toggle" value="true" data-toggle="dropdown">\
+                            <button type="button" class="btn btn-info dropdown-toggle" value="true" data-toggle="dropdown" id="filter-value-case-button">\
                                 <span class="selected-label">' + instance.options.formatSmartFilterCaseSensitive() + '</span>\
                                 <span class="caret"></span>\
                             </button>\
@@ -289,14 +396,16 @@
                 </div>\
                 <div class="row" style="margin-top:10px;">\
                     <div class="col-md-12">\
-                        <div class="pull-right" id="filter-action-container">\
-                            <button type="button" class="btn btn-success button-add"><span class="glyphicon glyphicon-plus"></span>&nbsp; ' + instance.options.formatSmartFilterAddButton() + '</button>\
-                            &nbsp;\
-                            <button type="button" class="btn btn-primary dropdown-toggle button-grouprule"><span class="glyphicon glyphicon-link"></span>&nbsp; ' + instance.options.formatSmartFilterGroupRulesButton() + '</button>\
+                        <div class="btn-group" id="filter-action-container">\
+                            <button type="button" class="btn btn-success" id="filter-action-add"><span class="glyphicon glyphicon-plus"></span>' + instance.options.formatSmartFilterAddButton() + '</button>\
+                            <button type="button" class="btn btn-success" id="filter-action-grouprule" disabled="disabled"><span class="glyphicon glyphicon-link"></span>' + instance.options.formatSmartFilterGroupRulesButton() + '</button>\
+                            <button type="button" class="btn btn-danger" id="filter-action-clear" ><span class="glyphicon glyphicon-remove"></span>' + instance.options.formatSmartFilterResetButton() + '</button>\
                         </div>\
                     </div>\
                 </div>\
-                <div class="clearfix" data-resize="auto">\
+                <div class="row">\
+                    <div class="col-md-12 well" id="filter-rules-container" >\
+                    </div>\
                 </div>\
             </div>\
         </div>\
@@ -397,6 +506,45 @@
         } else if (field.fieldType === 'datetime') {
             inputContainer.append($('<input type="datetime" class="form-control pull-left" id="filter-value">'));
         }
+    }
+
+    var smartFilterRenderRules = function (instance) {
+        var rulesContainer = $('#filter-rules-container');
+        rulesContainer.empty();
+
+        if (instance.options.smartFilterData == null) instance.options.smartFilterData = [];
+        if (instance.options.smartFilterData.length <= 0)
+            rulesContainer.append($('<p>' + instance.options.formatSmartFilterEmptyRulesContainer() + '</p>'));
+
+        $.each(instance.options.smartFilterData, function (index, item) {
+            var ruleDescription = $('<div class="smart-filter-rule "></div>');
+            var postRuleDescription = null;
+
+            if (item.isGrouped) {
+                ruleDescription.addClass("grouped");
+                if (index == 0 || !instance.options.smartFilterData[index - 1].isGrouped) rulesContainer.append('<span class="text-primary">REMOVE GROUP LINK</span>');
+                //if (instance.options.smartFilterData.length - 1 == index || !instance.options.smartFilterData[index + 1].isGrouped) postRuleDescription = $('<h3 class="text-primary">]</h3>');
+            }
+
+            var ruleText = $('<span class="help-block">' + item.description + '</span>');
+            ruleText.on('click', { instance: instance }, BootstrapTable.prototype.smartFilterSelectRule);
+            if (index != instance.options.smartFilterData.length - 1) {
+                var ruleAndOrOption = $('<button type="button" class="btn btn-info" value="and"></button>');
+                ruleAndOrOption.on('click', { instance: instance }, BootstrapTable.prototype.smartFilterToogleAndOr);
+                ruleAndOrOption.text(instance.options.formatSmartFilterOperandAnd());
+                ruleText.append(ruleAndOrOption);
+            }
+
+            var rulesAction = $('<button type="button" class="btn btn-warning pull-right button-remove" value="' + index + '"><span class="glyphicon glyphicon-minus"></span>&nbsp;Remove</button>');
+            rulesAction.on('click', { instance: instance }, BootstrapTable.prototype.smartFilterRemoveRule);
+            ruleDescription.append(rulesAction);
+
+
+            ruleDescription.append(ruleText);
+            rulesContainer.append(ruleDescription);
+            if (postRuleDescription) rulesContainer.append(postRuleDescription);
+        });
+
     }
 
     //#endregion
